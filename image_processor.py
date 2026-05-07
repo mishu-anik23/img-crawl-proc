@@ -9,9 +9,9 @@ import re
 import argparse
 import sys
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 
@@ -21,12 +21,18 @@ class ImageProcessor:
     
     PRODUCT_PREFIX = "SKEU"
     PRODUCT_NAME = "Panjabi"
+    DATA_FILENAME = "sku_punjabi_price.xlsx"
+    CONTACT_NUMBER = "+4917673953530"
+    DEFAULT_LOGO_TEXT = "Shatkahon EU"
     
-    def __init__(self, image_dir):
+    def __init__(self, image_dir, data_path=None, logo_path=None):
         self.image_dir = Path(image_dir)
         self.processed_dir = self.image_dir / "processed"
         self.processed_dir.mkdir(exist_ok=True)
         self.metadata = []
+        self.pricing = {}
+        self.data_path = Path(data_path) if data_path else None
+        self.logo_path = Path(logo_path) if logo_path else None
     
     def parse_filename(self, filename):
         """
@@ -101,6 +107,157 @@ class ImageProcessor:
         # Crop the image
         return img.crop((0, 0, img_array.shape[1], crop_bottom))
     
+    def normalize_lookup_key(self, value):
+        return re.sub(r'[^A-Z0-9]', '', str(value).upper())
+    
+    def load_pricing_data(self):
+        if self.pricing:
+            return True
+        search_paths = []
+        if self.data_path:
+            search_paths.append(self.data_path)
+        search_paths.extend([
+            self.image_dir / self.DATA_FILENAME,
+            self.image_dir.parent / self.DATA_FILENAME,
+            Path.cwd() / self.DATA_FILENAME,
+        ])
+        data_file = None
+        for candidate in search_paths:
+            if candidate and Path(candidate).exists():
+                data_file = Path(candidate)
+                break
+        if not data_file:
+            return False
+        try:
+            wb = load_workbook(data_file, data_only=True)
+            ws = wb.active
+            header = [str(cell.value).strip() if cell.value and str(cell.value).strip() else "" for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            sku_idx = None
+            price_idx = None
+            for i, heading in enumerate(header):
+                if heading and sku_idx is None and re.search(r'sku|product.*code|product.*sku|code', heading, re.I):
+                    sku_idx = i
+                if heading and price_idx is None and re.search(r'sell.*price|price|cost', heading, re.I):
+                    price_idx = i
+            if sku_idx is None and len(header) >= 1:
+                sku_idx = 0
+            if price_idx is None and len(header) >= 2:
+                price_idx = 1
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if not row or sku_idx >= len(row) or row[sku_idx] is None:
+                    continue
+                raw_sku = str(row[sku_idx]).strip()
+                raw_price = row[price_idx] if price_idx < len(row) else None
+                if not raw_sku or raw_price is None:
+                    continue
+                self.pricing[self.normalize_lookup_key(raw_sku)] = raw_price
+            return bool(self.pricing)
+        except Exception as e:
+            print(f"✗ Error loading price data from {data_file}: {e}")
+            return False
+    
+    def get_image_price(self, metadata):
+        if not self.pricing:
+            return None
+        candidates = [
+            metadata.get('product_code'),
+            metadata.get('product_name'),
+            metadata.get('slug'),
+            metadata.get('product_code', '').replace('SKEU-', ''),
+            metadata.get('product_code', '').replace('-', ''),
+            metadata.get('product_name', '').replace('-', ''),
+        ]
+        for candidate in candidates:
+            if candidate:
+                key = self.normalize_lookup_key(candidate)
+                if key in self.pricing:
+                    return self.pricing[key]
+        code_tail = metadata.get('product_code', '').split('-')[-1]
+        if code_tail:
+            key = self.normalize_lookup_key(code_tail)
+            if key in self.pricing:
+                return self.pricing[key]
+        return None
+    
+    def find_logo_path(self):
+        if self.logo_path and self.logo_path.exists():
+            return self.logo_path
+        candidates = []
+        if self.image_dir.exists():
+            candidates.extend(self.image_dir.glob('*shatkahon*'))
+            candidates.extend(self.image_dir.glob('*Shatkahon*'))
+        parent_dir = self.image_dir.parent
+        if parent_dir.exists():
+            candidates.extend(parent_dir.glob('*shatkahon*'))
+            candidates.extend(parent_dir.glob('*Shatkahon*'))
+        brand_logo_dir = Path.cwd() / 'brand-logo'
+        if brand_logo_dir.exists():
+            candidates.extend(brand_logo_dir.glob('*shatkahon*'))
+            candidates.extend(brand_logo_dir.glob('*ShatkahonEU*'))
+        for candidate in candidates:
+            if candidate.is_file() and candidate.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
+                return candidate
+        return None
+    
+    def add_bottom_bar(self, img, metadata):
+        width, height = img.size
+        bar_height = max(100, int(width * 0.14))
+        new_image = Image.new('RGB', (width, height + bar_height), 'white')
+        new_image.paste(img, (0, 0))
+        draw = ImageDraw.Draw(new_image)
+        try:
+            font_size = max(18, int(bar_height * 0.28))
+            font = ImageFont.truetype('arial.ttf', font_size)
+        except Exception:
+            font = ImageFont.load_default()
+        logo_path = self.find_logo_path()
+        left_padding = 20
+        text_padding = 20
+        logo_width = 0
+        if logo_path:
+            try:
+                logo_img = Image.open(logo_path)
+                if logo_img.mode not in ('RGBA', 'LA'):
+                    logo_img = logo_img.convert('RGBA')
+                logo_img.thumbnail((int(width * 0.22), bar_height - 20), Image.Resampling.LANCZOS)
+                logo_x = left_padding
+                logo_y = height + (bar_height - logo_img.height) // 2
+                new_image.paste(logo_img, (logo_x, logo_y), logo_img)
+                logo_width = logo_img.width + text_padding
+            except Exception:
+                logo_width = 0
+        else:
+            title_text = self.DEFAULT_LOGO_TEXT
+            text_size = draw.textbbox((0, 0), title_text, font=font)
+            title_y = height + (bar_height - (text_size[3] - text_size[1])) // 2
+            draw.text((left_padding, title_y), title_text, fill='black', font=font)
+            logo_width = 0
+        text_x = left_padding + logo_width
+        price_value = self.get_image_price(metadata)
+        if price_value is None:
+            price_line = 'Sell price: N/A'
+        else:
+            raw_price = str(price_value).strip()
+            if raw_price.startswith('€'):
+                raw_price = raw_price.lstrip('€ ').strip()
+            price_line = f'Sell price: €{raw_price}'
+        sku_text = metadata.get('product_code', '')
+        contact_text = self.CONTACT_NUMBER
+        line_spacing = 8
+        sku_size = draw.textbbox((0, 0), sku_text, font=font)
+        price_size = draw.textbbox((0, 0), price_line, font=font)
+        text_total_height = (sku_size[3] - sku_size[1]) + (price_size[3] - price_size[1]) + line_spacing
+        text_y = height + (bar_height - text_total_height) // 2
+        draw.text((text_x, text_y), sku_text, fill='black', font=font)
+        draw.text((text_x, text_y + (sku_size[3] - sku_size[1]) + line_spacing), price_line, fill='black', font=font)
+        contact_size = draw.textbbox((0, 0), contact_text, font=font)
+        contact_x = width - left_padding - (contact_size[2] - contact_size[0])
+        contact_y = height + (bar_height - (contact_size[3] - contact_size[1])) // 2
+        draw.text((contact_x, contact_y), contact_text, fill='black', font=font)
+        metadata['price'] = price_line
+        metadata['contact'] = contact_text
+        return new_image
+    
     def optimize_image(self, img_path):
         """
         Process image: crop black pixels, optimize resolution
@@ -142,6 +299,8 @@ class ImageProcessor:
         
         print(f"Found {len(image_files)} images")
         print("Processing images...")
+        if not self.load_pricing_data():
+            print(f"⚠ Warning: Could not find {self.DATA_FILENAME}. Price labels will be shown as N/A.")
         
         for idx, filename in enumerate(image_files, 1):
             try:
@@ -155,6 +314,7 @@ class ImageProcessor:
                 
                 # Process image
                 processed_img = self.optimize_image(img_path)
+                processed_img = self.add_bottom_bar(processed_img, metadata)
                 
                 # Save processed image
                 file_ext = Path(filename).suffix
@@ -191,7 +351,7 @@ class ImageProcessor:
             ws.title = "Image Metadata"
             
             # Add headers
-            headers = ['Product Name', 'Product Code', 'Image Slug']
+            headers = ['Product Name', 'Product Code', 'Image Slug', 'Sell Price']
             ws.append(headers)
             
             # Add data
@@ -199,13 +359,15 @@ class ImageProcessor:
                 ws.append([
                     item['product_name'],
                     item['product_code'],
-                    item['slug']
+                    item['slug'],
+                    item.get('price', '')
                 ])
             
             # Adjust column widths
             ws.column_dimensions['A'].width = 25
             ws.column_dimensions['B'].width = 25
             ws.column_dimensions['C'].width = 35
+            ws.column_dimensions['D'].width = 18
             
             # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -237,11 +399,15 @@ Examples:
     parser.add_argument('-f', '--excel', 
                        action='store_true',
                        help='Generate Excel file with metadata')
+    parser.add_argument('-d', '--data',
+                       help='Path to the SKU pricing Excel file (sku_punjabi_price.xlsx)')
+    parser.add_argument('-l', '--logo',
+                       help='Path to the Shatkahon EU logo image to print in the footer')
     
     args = parser.parse_args()
     
     # Process images
-    processor = ImageProcessor(args.image_path)
+    processor = ImageProcessor(args.image_path, data_path=args.data, logo_path=args.logo)
     success = processor.process_images(generate_excel=args.excel)
     
     return 0 if success else 1

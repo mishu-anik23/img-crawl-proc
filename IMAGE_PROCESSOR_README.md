@@ -33,6 +33,11 @@ python image_processor.py "C:\path\to\images"
 python image_processor.py "C:\path\to\images" -f
 ```
 
+### Processing with Price Excel and Logo Footer
+```bash
+python image_processor.py "C:\path\to\images" -f -d "sku_punjabi_price.xlsx" -l "shatkahon_logo.png"
+```
+
 ## Filename Format
 
 Input filenames must follow this pattern:
