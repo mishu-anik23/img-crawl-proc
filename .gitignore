@@ -1,0 +1,10 @@
+# Temporary editor/lock files
+.~lock*
+# Processed output folders
+ShatkahonEU/Punjabi/processed/
+# Python caches
+__pycache__/
+*.py[cod]
+# OS files
+Thumbs.db
+.DS_Store
