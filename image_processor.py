@@ -21,7 +21,7 @@ class ImageProcessor:
     
     PRODUCT_PREFIX = "SKEU"
     PRODUCT_NAME = "Panjabi"
-    DATA_FILENAME = "skeu-punjabi-price.xlsx"
+    DATA_FILENAMES = ["sku_punjabi_price.xlsx", "skeu-punjabi-price.xlsx"]
     CONTACT_NUMBER = "+4917673953530"
     DEFAULT_LOGO_TEXT = "Shatkahon EU"
     
@@ -116,11 +116,12 @@ class ImageProcessor:
         search_paths = []
         if self.data_path:
             search_paths.append(self.data_path)
-        search_paths.extend([
-            self.image_dir / self.DATA_FILENAME,
-            self.image_dir.parent / self.DATA_FILENAME,
-            Path.cwd() / self.DATA_FILENAME,
-        ])
+        for filename in self.DATA_FILENAMES:
+            search_paths.extend([
+                self.image_dir / filename,
+                self.image_dir.parent / filename,
+                Path.cwd() / filename,
+            ])
         data_file = None
         for candidate in search_paths:
             if candidate and Path(candidate).exists():
@@ -199,6 +200,9 @@ class ImageProcessor:
             candidates.extend(brand_logo_dir.glob('*ShatkahonEU*'))
         root_candidates = Path.cwd().glob('*logo-shatkahonEU-small*')
         candidates.extend(root_candidates)
+        shatkahon_root = Path.cwd() / 'ShatkahonEU' / 'logo-satkahonEU-small.png'
+        if shatkahon_root.exists():
+            candidates.append(shatkahon_root)
         for candidate in candidates:
             if candidate.is_file() and candidate.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
                 return candidate
@@ -305,7 +309,7 @@ class ImageProcessor:
         print(f"Found {len(image_files)} images")
         print("Processing images...")
         if not self.load_pricing_data():
-            print(f"⚠ Warning: Could not find {self.DATA_FILENAME}. Price labels will be shown as N/A.")
+            print(f"⚠ Warning: Could not find any of {self.DATA_FILENAMES}. Price labels will be shown as N/A.")
         
         for idx, filename in enumerate(image_files, 1):
             try:
