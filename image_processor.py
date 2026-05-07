@@ -21,7 +21,7 @@ class ImageProcessor:
     
     PRODUCT_PREFIX = "SKEU"
     PRODUCT_NAME = "Panjabi"
-    DATA_FILENAME = "sku_punjabi_price.xlsx"
+    DATA_FILENAME = "skeu-punjabi-price.xlsx"
     CONTACT_NUMBER = "+4917673953530"
     DEFAULT_LOGO_TEXT = "Shatkahon EU"
     
@@ -184,16 +184,21 @@ class ImageProcessor:
             return self.logo_path
         candidates = []
         if self.image_dir.exists():
+            candidates.extend(self.image_dir.glob('*logo-shatkahonEU-small*'))
             candidates.extend(self.image_dir.glob('*shatkahon*'))
             candidates.extend(self.image_dir.glob('*Shatkahon*'))
         parent_dir = self.image_dir.parent
         if parent_dir.exists():
+            candidates.extend(parent_dir.glob('*logo-shatkahonEU-small*'))
             candidates.extend(parent_dir.glob('*shatkahon*'))
             candidates.extend(parent_dir.glob('*Shatkahon*'))
         brand_logo_dir = Path.cwd() / 'brand-logo'
         if brand_logo_dir.exists():
+            candidates.extend(brand_logo_dir.glob('*logo-shatkahonEU-small*'))
             candidates.extend(brand_logo_dir.glob('*shatkahon*'))
             candidates.extend(brand_logo_dir.glob('*ShatkahonEU*'))
+        root_candidates = Path.cwd().glob('*logo-shatkahonEU-small*')
+        candidates.extend(root_candidates)
         for candidate in candidates:
             if candidate.is_file() and candidate.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
                 return candidate
