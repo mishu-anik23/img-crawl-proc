@@ -217,8 +217,14 @@ class ImageProcessor:
         try:
             font_size = max(18, int(bar_height * 0.28))
             font = ImageFont.truetype('arial.ttf', font_size)
+            sku_font_size = max(12, int(font_size * 0.7))
+            sku_font = ImageFont.truetype('arial.ttf', sku_font_size)
+            price_font_size = max(20, int(font_size * 1.2))
+            price_font = ImageFont.truetype('arialbd.ttf', price_font_size)
         except Exception:
             font = ImageFont.load_default()
+            sku_font = ImageFont.load_default()
+            price_font = ImageFont.load_default()
         logo_path = self.find_logo_path()
         left_padding = 20
         text_padding = 20
@@ -253,12 +259,12 @@ class ImageProcessor:
         sku_text = metadata.get('product_code', '')
         contact_text = self.CONTACT_NUMBER
         line_spacing = 8
-        sku_size = draw.textbbox((0, 0), sku_text, font=font)
-        price_size = draw.textbbox((0, 0), price_line, font=font)
+        sku_size = draw.textbbox((0, 0), sku_text, font=sku_font)
+        price_size = draw.textbbox((0, 0), price_line, font=price_font)
         text_total_height = (sku_size[3] - sku_size[1]) + (price_size[3] - price_size[1]) + line_spacing
         text_y = height + (bar_height - text_total_height) // 2
-        draw.text((text_x, text_y), sku_text, fill='black', font=font)
-        draw.text((text_x, text_y + (sku_size[3] - sku_size[1]) + line_spacing), price_line, fill='black', font=font)
+        draw.text((text_x, text_y), sku_text, fill='black', font=sku_font)
+        draw.text((text_x, text_y + (sku_size[3] - sku_size[1]) + line_spacing), price_line, fill='black', font=price_font)
         contact_size = draw.textbbox((0, 0), contact_text, font=font)
         contact_x = width - left_padding - (contact_size[2] - contact_size[0])
         contact_y = height + (bar_height - (contact_size[3] - contact_size[1])) // 2
