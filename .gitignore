@@ -8,3 +8,11 @@ __pycache__/
 # OS files
 Thumbs.db
 .DS_Store
+
+# nanoImage
+nanoImage/.env
+nanoImage/backend/.venv/
+nanoImage/backend/storage/
+nanoImage/backend/__pycache__/
+nanoImage/frontend/node_modules/
+nanoImage/frontend/dist/
